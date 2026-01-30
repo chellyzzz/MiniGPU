@@ -5,6 +5,7 @@
 // > Receives memory requests from all cores
 // > Throttles requests based on limited external memory bandwidth
 // > Waits for responses from external memory and distributes them back to cores
+// > Uses fixed-priority arbitration to prevent race conditions between channels
 module controller #(
     parameter ADDR_BITS = 8,
     parameter DATA_BITS = 16,
@@ -43,54 +44,72 @@ module controller #(
 
     // Keep track of state for each channel and which jobs each channel is handling
     reg [2:0] controller_state [NUM_CHANNELS-1:0];
-    reg [$clog2(NUM_CONSUMERS)-1:0] current_consumer [NUM_CHANNELS-1:0]; // Which consumer is each channel currently serving
-    reg [NUM_CONSUMERS-1:0] channel_serving_consumer; // Which channels are being served? Prevents many workers from picking up the same request.
+    reg [$clog2(NUM_CONSUMERS)-1:0] current_consumer [NUM_CHANNELS-1:0];
+    
+    // Track which consumers are currently being served (registered, not combinational)
+    reg [NUM_CONSUMERS-1:0] consumer_being_served;
+
+    // Combinational: find which consumer this channel should serve (fixed priority per channel)
+    // Channel i has priority for consumers where (j % NUM_CHANNELS == i)
+    // This ensures no two channels can pick the same consumer
+    function automatic [$clog2(NUM_CONSUMERS):0] find_consumer_for_channel;
+        input integer channel_id;
+        input [NUM_CONSUMERS-1:0] read_valid;
+        input [NUM_CONSUMERS-1:0] write_valid;
+        input [NUM_CONSUMERS-1:0] being_served;
+        integer j;
+        begin
+            find_consumer_for_channel = NUM_CONSUMERS; // Invalid (none found)
+            // First pass: check consumers assigned to this channel by modulo
+            for (j = channel_id; j < NUM_CONSUMERS; j = j + NUM_CHANNELS) begin
+                if ((read_valid[j] || write_valid[j]) && !being_served[j]) begin
+                    find_consumer_for_channel = j;
+                    break;  // Use break to stop after finding first match
+                end
+            end
+        end
+    endfunction
 
     always @(posedge clk) begin
         if (reset) begin 
             mem_read_valid <= 0;
-            mem_read_address <= 0;
+            mem_read_address <= '{default: 0};
 
             mem_write_valid <= 0;
-            mem_write_address <= 0;
-            mem_write_data <= 0;
+            mem_write_address <= '{default: 0};
+            mem_write_data <= '{default: 0};
 
             consumer_read_ready <= 0;
-            consumer_read_data <= 0;
+            consumer_read_data <= '{default: 0};
             consumer_write_ready <= 0;
 
-            current_consumer <= 0;
-            controller_state <= 0;
-
-            channel_serving_consumer = 0;
+            current_consumer <= '{default: 0};
+            controller_state <= '{default: IDLE};
+            
+            consumer_being_served <= 0;
         end else begin 
-            // For each channel, we handle processing concurrently
+            // For each channel, we handle processing independently
             for (int i = 0; i < NUM_CHANNELS; i = i + 1) begin 
                 case (controller_state[i])
                     IDLE: begin
-                        // While this channel is idle, cycle through consumers looking for one with a pending request
-                        for (int j = 0; j < NUM_CONSUMERS; j = j + 1) begin 
-                            if (consumer_read_valid[j] && !channel_serving_consumer[j]) begin 
-                                channel_serving_consumer[j] = 1;
-                                current_consumer[i] <= j;
-
+                        // Find a consumer for this channel using fixed-priority assignment
+                        automatic integer selected;
+                        selected = find_consumer_for_channel(i, consumer_read_valid, consumer_write_valid, consumer_being_served);
+                        
+                        if (selected < NUM_CONSUMERS) begin
+                            // Mark consumer as being served
+                            consumer_being_served[selected] <= 1;
+                            current_consumer[i] <= selected;
+                            
+                            if (consumer_read_valid[selected]) begin
                                 mem_read_valid[i] <= 1;
-                                mem_read_address[i] <= consumer_read_address[j];
+                                mem_read_address[i] <= consumer_read_address[selected];
                                 controller_state[i] <= READ_WAITING;
-
-                                // Once we find a pending request, pick it up with this channel and stop looking for requests
-                                break;
-                            end else if (consumer_write_valid[j] && !channel_serving_consumer[j]) begin 
-                                channel_serving_consumer[j] = 1;
-                                current_consumer[i] <= j;
-
+                            end else begin
                                 mem_write_valid[i] <= 1;
-                                mem_write_address[i] <= consumer_write_address[j];
-                                mem_write_data[i] <= consumer_write_data[j];
+                                mem_write_address[i] <= consumer_write_address[selected];
+                                mem_write_data[i] <= consumer_write_data[selected];
                                 controller_state[i] <= WRITE_WAITING;
-
-                                // Once we find a pending request, pick it up with this channel and stop looking for requests
-                                break;
                             end
                         end
                     end
@@ -114,14 +133,14 @@ module controller #(
                     // Wait until consumer acknowledges it received response, then reset
                     READ_RELAYING: begin
                         if (!consumer_read_valid[current_consumer[i]]) begin 
-                            channel_serving_consumer[current_consumer[i]] = 0;
+                            consumer_being_served[current_consumer[i]] <= 0;
                             consumer_read_ready[current_consumer[i]] <= 0;
                             controller_state[i] <= IDLE;
                         end
                     end
                     WRITE_RELAYING: begin 
                         if (!consumer_write_valid[current_consumer[i]]) begin 
-                            channel_serving_consumer[current_consumer[i]] = 0;
+                            consumer_being_served[current_consumer[i]] <= 0;
                             consumer_write_ready[current_consumer[i]] <= 0;
                             controller_state[i] <= IDLE;
                         end
@@ -131,3 +150,4 @@ module controller #(
         end
     end
 endmodule
+

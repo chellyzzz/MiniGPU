@@ -26,7 +26,7 @@ module gpu #(
 
     // Device Control Register
     input wire device_control_write_enable,
-    input wire [7:0] device_control_data,
+    input wire [7:0] device_control_data, // Equals to thread count
 
     // Program Memory
     output wire [PROGRAM_MEM_NUM_CHANNELS-1:0] program_mem_read_valid,
@@ -220,6 +220,15 @@ module gpu #(
         if ($test$plusargs("dumpvars")) begin
             $dumpfile("build/gpu.vcd");
             $dumpvars(0, gpu);
+            
+            // // Explicitly dump register arrays (Icarus VCD doesn't auto-dump arrays)
+            // // Core 0, Thread 0-3 registers
+            // for (int t = 0; t < 16; t++) begin
+            //     $dumpvars(0, cores[0].core_instance.threads[0].register_instance.registers[t]);
+            //     $dumpvars(0, cores[0].core_instance.threads[1].register_instance.registers[t]);
+            //     $dumpvars(0, cores[0].core_instance.threads[2].register_instance.registers[t]);
+            //     $dumpvars(0, cores[0].core_instance.threads[3].register_instance.registers[t]);
+            // end
         end
     end
 endmodule
