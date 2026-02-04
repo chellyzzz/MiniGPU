@@ -35,44 +35,41 @@ module dispatch #(
     reg [7:0] blocks_done;
     reg start_execution;
 
-    // Next state signals for blocks_dispatched and blocks_done
-    reg [7:0] next_blocks_dispatched;
-    reg [7:0] next_blocks_done;
-
-    // Per-core control signals
-    reg [NUM_CORES-1:0] should_dispatch;
-    reg [NUM_CORES-1:0] should_complete;
-
     integer i;
-
-    // Combinational logic: determine which cores need dispatching or completion
+    
+    // Combinational: count how many cores are completing this cycle
+    reg [7:0] cores_completing;
     always @(*) begin
-        next_blocks_dispatched = blocks_dispatched;
-        next_blocks_done = blocks_done;
-        
-        for (i = 0; i < NUM_CORES; i = i + 1) begin
-            should_dispatch[i] = 1'b0;
-            should_complete[i] = 1'b0;
-        end
-
-        // Check for dispatch opportunities
-        for (i = 0; i < NUM_CORES; i = i + 1) begin
-            if (core_reset[i] && (next_blocks_dispatched < total_blocks)) begin
-                should_dispatch[i] = 1'b1;
-                next_blocks_dispatched = next_blocks_dispatched + 1;
-            end
-        end
-
-        // Check for completion
+        cores_completing = 0;
         for (i = 0; i < NUM_CORES; i = i + 1) begin
             if (core_start[i] && core_done[i]) begin
-                should_complete[i] = 1'b1;
-                next_blocks_done = next_blocks_done + 1;
+                cores_completing = cores_completing + 1;
+            end
+        end
+    end
+    
+    // Combinational: determine dispatch decisions for each core
+    // should_dispatch[i] = 1 means core i should start a new block
+    // dispatch_block_id[i] = the block ID to assign to core i
+    reg [NUM_CORES-1:0] should_dispatch;
+    reg [7:0] dispatch_block_id [NUM_CORES-1:0];
+    reg [7:0] total_dispatching;
+    
+    always @(*) begin
+        total_dispatching = 0;
+        for (i = 0; i < NUM_CORES; i = i + 1) begin
+            should_dispatch[i] = 0;
+            dispatch_block_id[i] = 0;
+            
+            if (core_reset[i] && !core_start[i] && ((blocks_dispatched + total_dispatching) < total_blocks)) begin
+                should_dispatch[i] = 1;
+                dispatch_block_id[i] = blocks_dispatched + total_dispatching;
+                total_dispatching = total_dispatching + 1;
             end
         end
     end
 
-    // Sequential logic: update state on clock edge
+    // Sequential logic: update state on clock edge (only non-blocking assignments)
     always @(posedge clk) begin
         if (reset) begin
             done <= 1'b0;
@@ -90,42 +87,37 @@ module dispatch #(
             // Initialize on first start
             if (!start_execution) begin
                 start_execution <= 1'b1;
-                for (i = 0; i < NUM_CORES; i = i + 1) begin
-                    core_reset[i] <= 1'b1;
-                end
             end
 
-            // Check if all blocks are done
-            if (next_blocks_done == total_blocks) begin
-                done <= 1'b1;
-            end
-
-            // Update counters
-            blocks_dispatched <= next_blocks_dispatched;
-            blocks_done <= next_blocks_done;
-
-            // Dispatch new blocks to cores
+            // Update counters atomically
+            blocks_done <= blocks_done + cores_completing;
+            blocks_dispatched <= blocks_dispatched + total_dispatching;
+            
+            // Process each core
             for (i = 0; i < NUM_CORES; i = i + 1) begin
                 if (should_dispatch[i]) begin
+                    // Dispatch a new block to this core
                     core_reset[i] <= 1'b0;
                     core_start[i] <= 1'b1;
-                    core_block_id[i] <= blocks_dispatched + i[7:0];
+                    core_block_id[i] <= dispatch_block_id[i];
                     
                     // Calculate thread count for this block
-                    if ((blocks_dispatched + i) == total_blocks - 1) begin
-                        core_thread_count[i] <= thread_count - ((blocks_dispatched + i[7:0]) * THREADS_PER_BLOCK);
+                    if (dispatch_block_id[i] == total_blocks - 1) begin
+                        core_thread_count[i] <= thread_count - (dispatch_block_id[i] * THREADS_PER_BLOCK);
                     end else begin
                         core_thread_count[i] <= THREADS_PER_BLOCK;
                     end
                 end
-            end
-
-            // Handle core completion
-            for (i = 0; i < NUM_CORES; i = i + 1) begin
-                if (should_complete[i]) begin
+                else if (core_start[i] && core_done[i]) begin
+                    // Core finished, reset for next block
                     core_reset[i] <= 1'b1;
                     core_start[i] <= 1'b0;
                 end
+            end
+            
+            // Check if all blocks are done
+            if ((blocks_done + cores_completing) >= total_blocks && total_blocks > 0) begin
+                done <= 1'b1;
             end
         end
     end
