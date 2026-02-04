@@ -81,6 +81,11 @@ def CONST(rd, imm8):
     return (0b1001 << 12) | ((rd & 0xF) << 8) | (imm8 & 0xFF)
 
 
+def JMP(rs):
+    """PC = Rs (无条件跳转到寄存器地址)"""
+    return (0b1010 << 12) | ((rs & 0xF) << 4)
+
+
 def RET():
     """线程结束"""
     return 0b1111_0000_0000_0000
@@ -106,6 +111,7 @@ def disassemble(instruction):
         0b0111: f"LDR R{rd}, R{rs}",
         0b1000: f"STR R{rs}, R{rt}",
         0b1001: f"CONST R{rd}, #{imm8}",
+        0b1010: f"JMP R{rs}",
         0b1111: "RET",
     }
     return opcodes.get(opcode, f"??? {instruction:016b}")

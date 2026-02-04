@@ -26,7 +26,7 @@ module decoder (
     output reg [1:0] decoded_reg_input_mux,        // Select input to register
     output reg [1:0] decoded_alu_arithmetic_mux,   // Select arithmetic operation
     output reg decoded_alu_output_mux,             // Select operation in ALU
-    output reg decoded_pc_mux,                     // Select source of next PC
+    output reg [1:0] decoded_pc_mux,             // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
 
     // Return (finished executing thread)
     output reg decoded_ret
@@ -41,6 +41,7 @@ module decoder (
         LDR = 4'b0111,
         STR = 4'b1000,
         CONST = 4'b1001,
+        JMP = 4'b1010,
         RET = 4'b1111;
 
     always @(posedge clk) begin 
@@ -123,6 +124,10 @@ module decoder (
                     CONST: begin 
                         decoded_reg_write_enable <= 1;
                         decoded_reg_input_mux <= 2'b10;
+                    end
+                    JMP: begin
+                        // JMP Rs: unconditional jump to address in Rs
+                        decoded_pc_mux <= 2;  // 2 = jump to register value
                     end
                     RET: begin 
                         decoded_ret <= 1;

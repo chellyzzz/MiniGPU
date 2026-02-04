@@ -22,10 +22,13 @@ module pc #(
     input reg [2:0] decoded_nzp,
     input reg [DATA_MEM_DATA_BITS-1:0] decoded_immediate,
     input reg decoded_nzp_write_enable,
-    input reg decoded_pc_mux, 
+    input reg [1:0] decoded_pc_mux,  // 0=PC+1, 1=BRnzp, 2=JMP
 
     // ALU Output - used for alu_out[2:0] to compare with NZP register
     input reg [DATA_MEM_DATA_BITS-1:0] alu_out,
+    
+    // Register value for JMP instruction (Rs value)
+    input reg [DATA_MEM_DATA_BITS-1:0] rs_value,
 
     // Current & Next PCs
     input reg [PROGRAM_MEM_ADDR_BITS-1:0] current_pc,
@@ -40,18 +43,27 @@ module pc #(
         end else if (enable) begin
             // Update PC when core_state = EXECUTE
             if (core_state == 3'b101) begin 
-                if (decoded_pc_mux == 1) begin 
-                    if (((nzp & decoded_nzp) != 3'b0)) begin 
-                        // On BRnzp instruction, branch to immediate if NZP case matches previous CMP
-                        next_pc <= decoded_immediate;
-                    end else begin 
-                        // Otherwise, just update to PC + 1 (next line)
+                case (decoded_pc_mux)
+                    2'd0: begin
+                        // Default: PC + 1
                         next_pc <= current_pc + 1;
                     end
-                end else begin 
-                    // By default update to PC + 1 (next line)
-                    next_pc <= current_pc + 1;
-                end
+                    2'd1: begin
+                        // BRnzp: conditional branch
+                        if ((nzp & decoded_nzp) != 3'b0) begin 
+                            next_pc <= decoded_immediate;
+                        end else begin 
+                            next_pc <= current_pc + 1;
+                        end
+                    end
+                    2'd2: begin
+                        // JMP: unconditional jump to register value
+                        next_pc <= rs_value;
+                    end
+                    default: begin
+                        next_pc <= current_pc + 1;
+                    end
+                endcase
             end   
 
             // Store NZP when core_state = UPDATE   

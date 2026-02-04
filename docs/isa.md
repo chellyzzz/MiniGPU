@@ -22,6 +22,7 @@
 | **LDR** | `Rd = global_data_mem[Rs]` | `0111 dddd ssss xxxx` |
 | **STR** | `global_data_mem[Rs] = Rt` | `1000 xxxx ssss tttt` |
 | **CONST** | `Rd = IMM8` | `1001 dddd iiii iiii` |
+| **JMP** | `PC = Rs` | `1010 xxxx ssss xxxx` |
 | **RET** | `done` | `1111 xxxx xxxx xxxx` |
 
 ---

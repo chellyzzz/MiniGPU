@@ -15,6 +15,11 @@ compile:
 	mv build/temp.v build/gpu.v
 
 # TODO: Get gtkwave visualizaiton
+clean:
+	rm -rf build/
+
+clean_logs:
+	rm -rf test/logs/
 
 show_%: %.vcd %.gtkw
 	gtkwave $^

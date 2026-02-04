@@ -68,7 +68,7 @@ module core #(
     reg [1:0] decoded_reg_input_mux;        // Select input to register
     reg [1:0] decoded_alu_arithmetic_mux;   // Select arithmetic operation
     reg decoded_alu_output_mux;             // Select operation in ALU
-    reg decoded_pc_mux;                     // Select source of next PC
+    reg [1:0] decoded_pc_mux;               // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
     reg decoded_ret;
 
     // Fetcher
@@ -204,6 +204,7 @@ module core #(
                 .decoded_nzp_write_enable(decoded_nzp_write_enable),
                 .decoded_pc_mux(decoded_pc_mux),
                 .alu_out(alu_out[i]),
+                .rs_value(rs[i]),
                 .current_pc(current_pc),
                 .next_pc(next_pc[i])
             );
