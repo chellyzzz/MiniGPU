@@ -53,6 +53,18 @@ module core #(
     reg [7:0] lsu_out[THREADS_PER_BLOCK-1:0];
     wire [7:0] alu_out[THREADS_PER_BLOCK-1:0];
     
+    // SIMT Stack: active mask (which threads are currently executing)
+    wire [THREADS_PER_BLOCK-1:0] active_mask;
+    
+    // Per-thread enable: thread exists AND is active (not masked by divergence)
+    wire [THREADS_PER_BLOCK-1:0] thread_enable;
+    genvar j;
+    generate
+        for (j = 0; j < THREADS_PER_BLOCK; j = j + 1) begin : enable_gen
+            assign thread_enable[j] = (j < thread_count) && active_mask[j];
+        end
+    endgenerate
+    
     // Decoded Instruction Signals
     reg [3:0] decoded_rd_address;
     reg [3:0] decoded_rs_address;
@@ -70,6 +82,7 @@ module core #(
     reg decoded_alu_output_mux;             // Select operation in ALU
     reg [1:0] decoded_pc_mux;               // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
     reg decoded_ret;
+    reg decoded_reconv;                      // Reconverge instruction for SIMT stack
 
     // Fetcher
     fetcher #(
@@ -107,12 +120,14 @@ module core #(
         .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
         .decoded_alu_output_mux(decoded_alu_output_mux),
         .decoded_pc_mux(decoded_pc_mux),
-        .decoded_ret(decoded_ret)
+        .decoded_ret(decoded_ret),
+        .decoded_reconv(decoded_reconv)
     );
 
-    // Scheduler
+    // Scheduler with SIMT Stack
     scheduler #(
         .THREADS_PER_BLOCK(THREADS_PER_BLOCK),
+        .PROGRAM_MEM_ADDR_BITS(PROGRAM_MEM_ADDR_BITS)
     ) scheduler_instance (
         .clk(clk),
         .reset(reset),
@@ -122,9 +137,12 @@ module core #(
         .decoded_mem_read_enable(decoded_mem_read_enable),
         .decoded_mem_write_enable(decoded_mem_write_enable),
         .decoded_ret(decoded_ret),
+        .decoded_pc_mux(decoded_pc_mux),
+        .decoded_reconv(decoded_reconv),
         .lsu_state(lsu_state),
         .current_pc(current_pc),
         .next_pc(next_pc),
+        .active_mask(active_mask),
         .done(done)
     );
 
@@ -136,7 +154,7 @@ module core #(
             alu alu_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_enable[i]),
                 .core_state(core_state),
                 .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
                 .decoded_alu_output_mux(decoded_alu_output_mux),
@@ -149,7 +167,7 @@ module core #(
             lsu lsu_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_enable[i]),
                 .core_state(core_state),
                 .decoded_mem_read_enable(decoded_mem_read_enable),
                 .decoded_mem_write_enable(decoded_mem_write_enable),
@@ -175,7 +193,7 @@ module core #(
             ) register_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_enable[i]),
                 .block_id(block_id),
                 .core_state(core_state),
                 .decoded_reg_write_enable(decoded_reg_write_enable),
@@ -197,7 +215,7 @@ module core #(
             ) pc_instance (
                 .clk(clk),
                 .reset(reset),
-                .enable(i < thread_count),
+                .enable(thread_enable[i]),
                 .core_state(core_state),
                 .decoded_nzp(decoded_nzp),
                 .decoded_immediate(decoded_immediate),

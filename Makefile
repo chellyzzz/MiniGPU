@@ -9,7 +9,7 @@ test_%:
 	COCOTB_TEST_MODULES=test.test_$* vvp -M $$(cocotb-config --lib-dir) -m libcocotbvpi_icarus build/sim.vvp +dumpfile=build/$*.vcd +dumpvars
 	
 compile:
-	sv2v -I src -I src/Core src/*.sv src/Core/*.sv -w build/gpu.v
+	sv2v -I src -I src/core src/*.sv src/core/*.sv -w build/gpu.v
 	echo '`timescale 1ns/1ns' > build/temp.v
 	cat build/gpu.v >> build/temp.v
 	mv build/temp.v build/gpu.v

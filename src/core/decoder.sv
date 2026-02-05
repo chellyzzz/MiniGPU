@@ -29,7 +29,10 @@ module decoder (
     output reg [1:0] decoded_pc_mux,             // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
 
     // Return (finished executing thread)
-    output reg decoded_ret
+    output reg decoded_ret,
+    
+    // Reconverge (SIMT stack pop for branch convergence)
+    output reg decoded_reconv
 );
     localparam NOP = 4'b0000,
         BRnzp = 4'b0001,
@@ -42,6 +45,7 @@ module decoder (
         STR = 4'b1000,
         CONST = 4'b1001,
         JMP = 4'b1010,
+        RECONV = 4'b1011,
         RET = 4'b1111;
 
     always @(posedge clk) begin 
@@ -60,6 +64,7 @@ module decoder (
             decoded_alu_output_mux <= 0;
             decoded_pc_mux <= 0;
             decoded_ret <= 0;
+            decoded_reconv <= 0;
         end else begin 
             // Decode when core_state = DECODE
             if (core_state == 3'b010) begin 
@@ -80,6 +85,7 @@ module decoder (
                 decoded_alu_output_mux <= 0;
                 decoded_pc_mux <= 0;
                 decoded_ret <= 0;
+                decoded_reconv <= 0;
 
                 // Set the control signals for each instruction
                 case (instruction[15:12])
@@ -131,6 +137,10 @@ module decoder (
                     end
                     RET: begin 
                         decoded_ret <= 1;
+                    end
+                    RECONV: begin
+                        // RECONV: explicit reconvergence point for SIMT stack
+                        decoded_reconv <= 1;
                     end
                 endcase
             end

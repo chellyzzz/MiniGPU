@@ -23,6 +23,7 @@
 | **STR** | `global_data_mem[Rs] = Rt` | `1000 xxxx ssss tttt` |
 | **CONST** | `Rd = IMM8` | `1001 dddd iiii iiii` |
 | **JMP** | `PC = Rs` | `1010 xxxx ssss xxxx` |
+| **RECONV** | SIMT Stack 汇合点 | `1011 xxxx xxxx xxxx` |
 | **RET** | `done` | `1111 xxxx xxxx xxxx` |
 
 ---
@@ -90,6 +91,12 @@ def STR(rs, rt):
 def CONST(rd, imm8):
     return (0b1001 << 12) | (rd << 8) | (imm8 & 0xFF)
 
+def JMP(rs):
+    return (0b1010 << 12) | (rs << 4)
+
+def RECONV():
+    return 0b1011_0000_0000_0000
+
 def RET():
     return 0b1111_0000_0000_0000
 
@@ -119,6 +126,32 @@ program = [
     ADD(R6, R4, R5),                 # C[i] = A[i] + B[i]
     ADD(R7, R3, R0),                 # addr(C[i])
     STR(R7, R6),                     # store C[i]
+    RET(),
+]
+```
+
+---
+
+## 示例：分支发散程序
+
+```python
+# Thread 0,2 (偶数) → R3 = 200
+# Thread 1,3 (奇数) → R3 = 100
+program = [
+    ADD(R0, THREAD_IDX, R0),     # R0 = threadIdx
+    CONST(R1, 2),
+    DIV(R2, R0, R1),             # R2 = R0 / 2
+    MUL(R2, R2, R1),             # R2 = (R0/2) * 2
+    SUB(R2, R0, R2),             # R2 = R0 % 2
+    CONST(R4, 0),
+    CMP(R2, R4),                 # 比较 R0 % 2 和 0
+    BRz(11),                     # 如果 == 0, 跳到 then
+    CONST(R3, 100),              # else: R3 = 100
+    CONST(R5, 12),
+    JMP(R5),                     # 跳到 RECONV
+    CONST(R3, 200),              # then: R3 = 200
+    RECONV(),                    # 汇合点!
+    # 汇合后所有线程继续...
     RET(),
 ]
 ```

@@ -91,6 +91,11 @@ def RET():
     return 0b1111_0000_0000_0000
 
 
+def RECONV():
+    """SIMT Stack 汇合点 (显式)"""
+    return 0b1011_0000_0000_0000
+
+
 def disassemble(instruction):
     """反汇编单条指令"""
     opcode = (instruction >> 12) & 0xF
@@ -112,6 +117,7 @@ def disassemble(instruction):
         0b1000: f"STR R{rs}, R{rt}",
         0b1001: f"CONST R{rd}, #{imm8}",
         0b1010: f"JMP R{rs}",
+        0b1011: "RECONV",
         0b1111: "RET",
     }
     return opcodes.get(opcode, f"??? {instruction:016b}")
