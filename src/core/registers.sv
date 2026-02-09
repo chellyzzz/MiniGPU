@@ -32,6 +32,7 @@ module registers #(
     // Thread Unit Outputs
     input reg [DATA_BITS-1:0] alu_out,
     input reg [DATA_BITS-1:0] lsu_out,
+    input reg [DATA_BITS-1:0] smem_out,  // Shared memory output
 
     // Registers
     output reg [7:0] rs,
@@ -39,7 +40,8 @@ module registers #(
 );
     localparam ARITHMETIC = 2'b00,
         MEMORY = 2'b01,
-        CONSTANT = 2'b10;
+        CONSTANT = 2'b10,
+        SMEM = 2'b11;       // Shared memory
 
     // 16 registers per thread (13 free registers and 3 read-only registers)
     reg [7:0] registers[15:0];
@@ -93,6 +95,10 @@ module registers #(
                         CONSTANT: begin 
                             // CONST
                             registers[decoded_rd_address] <= decoded_immediate;
+                        end
+                        SMEM: begin
+                            // LDS (Load from Shared Memory)
+                            registers[decoded_rd_address] <= smem_out;
                         end
                     endcase
                 end

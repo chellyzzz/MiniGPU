@@ -19,11 +19,13 @@
 | **SUB** | `Rd = Rs - Rt` | `0100 dddd ssss tttt` |
 | **MUL** | `Rd = Rs * Rt` | `0101 dddd ssss tttt` |
 | **DIV** | `Rd = Rs / Rt` | `0110 dddd ssss tttt` |
-| **LDR** | `Rd = global_data_mem[Rs]` | `0111 dddd ssss xxxx` |
-| **STR** | `global_data_mem[Rs] = Rt` | `1000 xxxx ssss tttt` |
+| **LDR** | `Rd = global_mem[Rs]` | `0111 dddd ssss xxxx` |
+| **STR** | `global_mem[Rs] = Rt` | `1000 xxxx ssss tttt` |
 | **CONST** | `Rd = IMM8` | `1001 dddd iiii iiii` |
 | **JMP** | `PC = Rs` | `1010 xxxx ssss xxxx` |
 | **RECONV** | SIMT Stack 汇合点 | `1011 xxxx xxxx xxxx` |
+| **LDS** | `Rd = shared_mem[Rs]` | `1100 dddd ssss xxxx` |
+| **STS** | `shared_mem[Rs] = Rt` | `1101 xxxx ssss tttt` |
 | **RET** | `done` | `1111 xxxx xxxx xxxx` |
 
 ---
@@ -96,6 +98,14 @@ def JMP(rs):
 
 def RECONV():
     return 0b1011_0000_0000_0000
+
+def LDS(rd, rs):
+    """Load from shared memory: Rd = shared_mem[Rs]"""
+    return (0b1100 << 12) | (rd << 8) | (rs << 4)
+
+def STS(rs, rt):
+    """Store to shared memory: shared_mem[Rs] = Rt"""
+    return (0b1101 << 12) | (rs << 4) | rt
 
 def RET():
     return 0b1111_0000_0000_0000

@@ -23,10 +23,14 @@ module decoder (
     output reg decoded_mem_read_enable,            // Enable reading from memory
     output reg decoded_mem_write_enable,           // Enable writing to memory
     output reg decoded_nzp_write_enable,           // Enable writing to NZP register
-    output reg [1:0] decoded_reg_input_mux,        // Select input to register
+    output reg [1:0] decoded_reg_input_mux,        // Select input to register (00=ALU, 01=MEM, 10=CONST, 11=SMEM)
     output reg [1:0] decoded_alu_arithmetic_mux,   // Select arithmetic operation
     output reg decoded_alu_output_mux,             // Select operation in ALU
-    output reg [1:0] decoded_pc_mux,             // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
+    output reg [1:0] decoded_pc_mux,               // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
+    
+    // Shared Memory Control Signals
+    output reg decoded_smem_read_enable,           // Enable reading from shared memory
+    output reg decoded_smem_write_enable,          // Enable writing to shared memory
 
     // Return (finished executing thread)
     output reg decoded_ret,
@@ -46,6 +50,8 @@ module decoder (
         CONST = 4'b1001,
         JMP = 4'b1010,
         RECONV = 4'b1011,
+        LDS = 4'b1100,      // Load from Shared Memory
+        STS = 4'b1101,      // Store to Shared Memory
         RET = 4'b1111;
 
     always @(posedge clk) begin 
@@ -63,6 +69,8 @@ module decoder (
             decoded_alu_arithmetic_mux <= 0;
             decoded_alu_output_mux <= 0;
             decoded_pc_mux <= 0;
+            decoded_smem_read_enable <= 0;
+            decoded_smem_write_enable <= 0;
             decoded_ret <= 0;
             decoded_reconv <= 0;
         end else begin 
@@ -84,6 +92,8 @@ module decoder (
                 decoded_alu_arithmetic_mux <= 0;
                 decoded_alu_output_mux <= 0;
                 decoded_pc_mux <= 0;
+                decoded_smem_read_enable <= 0;
+                decoded_smem_write_enable <= 0;
                 decoded_ret <= 0;
                 decoded_reconv <= 0;
 
@@ -141,6 +151,16 @@ module decoder (
                     RECONV: begin
                         // RECONV: explicit reconvergence point for SIMT stack
                         decoded_reconv <= 1;
+                    end
+                    LDS: begin
+                        // LDS Rd, [Rs]: Load from shared memory
+                        decoded_reg_write_enable <= 1;
+                        decoded_reg_input_mux <= 2'b11;  // 11 = from shared memory
+                        decoded_smem_read_enable <= 1;
+                    end
+                    STS: begin
+                        // STS [Rs], Rt: Store to shared memory
+                        decoded_smem_write_enable <= 1;
                     end
                 endcase
             end

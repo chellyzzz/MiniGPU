@@ -65,24 +65,36 @@ module core #(
         end
     endgenerate
     
-    // Decoded Instruction Signals
-    reg [3:0] decoded_rd_address;
-    reg [3:0] decoded_rs_address;
-    reg [3:0] decoded_rt_address;
-    reg [2:0] decoded_nzp;
-    reg [7:0] decoded_immediate;
+    // Decoded Instruction Signals (driven by decoder module)
+    wire [3:0] decoded_rd_address;
+    wire [3:0] decoded_rs_address;
+    wire [3:0] decoded_rt_address;
+    wire [2:0] decoded_nzp;
+    wire [7:0] decoded_immediate;
 
-    // Decoded Control Signals
-    reg decoded_reg_write_enable;           // Enable writing to a register
-    reg decoded_mem_read_enable;            // Enable reading from memory
-    reg decoded_mem_write_enable;           // Enable writing to memory
-    reg decoded_nzp_write_enable;           // Enable writing to NZP register
-    reg [1:0] decoded_reg_input_mux;        // Select input to register
-    reg [1:0] decoded_alu_arithmetic_mux;   // Select arithmetic operation
-    reg decoded_alu_output_mux;             // Select operation in ALU
-    reg [1:0] decoded_pc_mux;               // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
-    reg decoded_ret;
-    reg decoded_reconv;                      // Reconverge instruction for SIMT stack
+    // Decoded Control Signals (driven by decoder module)
+    wire decoded_reg_write_enable;           // Enable writing to a register
+    wire decoded_mem_read_enable;            // Enable reading from memory
+    wire decoded_mem_write_enable;           // Enable writing to memory
+    wire decoded_nzp_write_enable;           // Enable writing to NZP register
+    wire [1:0] decoded_reg_input_mux;        // Select input to register
+    wire [1:0] decoded_alu_arithmetic_mux;   // Select arithmetic operation
+    wire decoded_alu_output_mux;             // Select operation in ALU
+    wire [1:0] decoded_pc_mux;               // Select source of next PC (0=+1, 1=BRnzp, 2=JMP)
+    wire decoded_ret;
+    wire decoded_reconv;                      // Reconverge instruction for SIMT stack
+    
+    // Shared Memory Control Signals (driven by decoder module)
+    wire decoded_smem_read_enable;
+    wire decoded_smem_write_enable;
+    wire [DATA_MEM_DATA_BITS-1:0] smem_read_data;
+    
+    // Shared Memory Access: Use Thread 0's Rs/Rt for address/data
+    // Only sample when shared memory is actually being accessed to avoid X propagation
+    wire smem_active = (decoded_smem_read_enable || decoded_smem_write_enable) && 
+                       (core_state == 3'b011 || core_state == 3'b110);  // REQUEST or UPDATE
+    wire [DATA_MEM_ADDR_BITS-1:0] smem_addr = smem_active ? rs[0] : 8'b0;
+    wire [DATA_MEM_DATA_BITS-1:0] smem_wdata = smem_active ? rt[0] : 8'b0;
 
     // Fetcher
     fetcher #(
@@ -120,8 +132,27 @@ module core #(
         .decoded_alu_arithmetic_mux(decoded_alu_arithmetic_mux),
         .decoded_alu_output_mux(decoded_alu_output_mux),
         .decoded_pc_mux(decoded_pc_mux),
+        .decoded_smem_read_enable(decoded_smem_read_enable),
+        .decoded_smem_write_enable(decoded_smem_write_enable),
         .decoded_ret(decoded_ret),
         .decoded_reconv(decoded_reconv)
+    );
+    
+    // Shared Memory (block-level scratchpad)
+    shared_memory #(
+        .ADDR_BITS(DATA_MEM_ADDR_BITS),
+        .DATA_BITS(DATA_MEM_DATA_BITS),
+        .SIZE(256),
+        .THREADS_PER_BLOCK(THREADS_PER_BLOCK)
+    ) shared_memory_instance (
+        .clk(clk),
+        .reset(reset),
+        .read_enable(decoded_smem_read_enable && core_state == 3'b011),  // REQUEST stage
+        .read_addr(smem_addr),
+        .read_data(smem_read_data),
+        .write_enable(decoded_smem_write_enable && core_state == 3'b110), // UPDATE stage
+        .write_addr(smem_addr),
+        .write_data(smem_wdata)
     );
 
     // Scheduler with SIMT Stack
@@ -204,6 +235,7 @@ module core #(
                 .decoded_immediate(decoded_immediate),
                 .alu_out(alu_out[i]),
                 .lsu_out(lsu_out[i]),
+                .smem_out(smem_read_data),  // Shared memory read data (same for all threads)
                 .rs(rs[i]),
                 .rt(rt[i])
             );
