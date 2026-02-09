@@ -28,74 +28,10 @@ Built with fully documented Verilog, complete documentation on architecture & IS
 
 # Architecture
 
-## GPU Overview
-
-```mermaid
-graph TB
-    subgraph GPU
-        DCR[Device Control<br/>Register]
-        DISP[Dispatcher]
-        
-        subgraph Cores
-            C0[Core 0]
-            C1[Core 1]
-            CN[Core N...]
-        end
-        
-        PMC[Program Memory<br/>Controller]
-        DMC[Data Memory<br/>Controller]
-    end
-    
-    PMEM[(Program<br/>Memory)] <--> PMC
-    DMEM[(Data<br/>Memory)] <--> DMC
-    
-    DCR --> DISP
-    DISP --> C0
-    DISP --> C1
-    DISP --> CN
-    PMC --> Cores
-    DMC --> Cores
-```
-
-## Compute Core
-
-```mermaid
-graph TB
-    subgraph Core["Compute Core"]
-        SCH[Scheduler + SIMT Stack]
-        FET[Fetcher]
-        ICACHE[I-Cache 16-line]
-        DEC[Decoder]
-        SMEM[Shared Memory 256B]
-        
-        SCH --> FET
-        FET --> ICACHE
-        ICACHE --> DEC
-        
-        subgraph T0["Thread 0"]
-            ALU0[ALU]
-            LSU0[LSU]
-            REG0[Registers]
-            PC0[PC/NZP]
-        end
-        
-        subgraph T1["Thread 1-3..."]
-            ALU1[ALU]
-            LSU1[LSU]
-            REG1[Registers]
-            PC1[PC/NZP]
-        end
-        
-        DEC --> T0
-        DEC --> T1
-        SMEM <--> T0
-        SMEM <--> T1
-    end
-    
-    PMEM[(Program Mem)] --> ICACHE
-    DMEM[(Data Mem)] <--> LSU0
-    DMEM <--> LSU1
-```
+<p float="left">
+  <img src="/docs/images/gpu.png" alt="GPU" width="48%">
+  <img src="/docs/images/core.png" alt="Core" width="48%">
+</p>
 
 # ISA
 
@@ -195,6 +131,3 @@ Updates I want to make in the future to improve the design, anyone else is welco
 - [ ] Add basic memory coalescing
 - [ ] Add basic pipelining
 - [ ] Add warp scheduling for latency hiding
-- [ ] Build an adapter to use GPU with Tiny Tapeout
-- [ ] Optimize control flow and use of registers to improve cycle time
-- [ ] Write a basic graphics kernel or add simple graphics hardware to demonstrate graphics functionality
